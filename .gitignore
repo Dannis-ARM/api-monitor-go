@@ -1,0 +1,42 @@
+# Byte-compiled Python files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.env/
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE-specific files
+.vscode/
+.idea/
+
+# Operating system-specific files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Test and coverage
+.coverage
+htmlcov/
+nosetests.xml
+coverage.xml
+
+# Django specific (if applicable)
+*.log
+local_settings.py
+db.sqlite3
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+test.*
+sandbox/

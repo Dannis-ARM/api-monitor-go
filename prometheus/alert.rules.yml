@@ -1,0 +1,25 @@
+groups:
+- name: api-monitor-alerts
+  rules:
+  - alert: APIDown
+    expr: api_availability_status{job="api-monitor"} == 0
+    for: 3m # consucutive 3 minutes 
+    labels:
+      severity: critical
+    annotations:
+      summary: "API {{ $labels.api_name }} is down"
+      description: "{{ $labels.api_name }} has been down for more than 3 minutes."
+
+  - alert: APILatencyHigh
+    expr: api_response_seconds{job="api-monitor"} > 5
+    for: 3m
+    labels:
+      severity: warning
+    annotations:
+      summary: "API {{ $labels.api_name }} latency is high"
+      description: "{{ $labels.api_name }} response time is greater than 5 seconds for more than 1 minute."
+
+- name: api-monitor-recording-rules
+  rules:
+  - record: job:api_response_seconds:avg5m
+    expr: avg_over_time(api_response_seconds{job="api-monitor"}[5m])
