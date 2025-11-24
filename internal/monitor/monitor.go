@@ -54,10 +54,11 @@ func StartMonitoring(
 	RegisterMetrics()
 
 	// Hardcode API probes
+	// Define API probes.
 	probes := []ProbeExecutor{
-		NewHTTPSProbe("https://www.google.com", "google"),
-		NewHTTPSProbe("https://www.lala.com", "lala"),
-		NewHTTPProbe("http://180.101.51.73", "baiduraw"),
+		NewHTTPSProbe("https://www.baidu.com", "BaiduHTTPSGetProbe"), // Baidu HTTPS GET probe
+		NewHTTPSProbe("https://www.lala.com", "lalahttpsgetprobe"),   // Lala HTTPS GET probe
+		NewHTTPProbe("http://180.101.51.73", "iphttpgetprobe"),       // IP HTTP GET probe
 	}
 
 	// Start a goroutine to periodically probe APIs

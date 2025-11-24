@@ -15,38 +15,40 @@ type ProbeExecutor interface {
 // HTTPGetProbe is an implementation of ProbeExecutor for executing HTTP GET requests.
 type HTTPGetProbe struct {
 	Client *http.Client
+	URL    string
+	Name   string
 }
 
 // NewHTTPGetProbe creates and returns a new HTTPGetProbe instance.
-func NewHTTPGetProbe() *HTTPGetProbe {
+func NewHTTPGetProbe(url, name string) *HTTPGetProbe {
 	return &HTTPGetProbe{
 		Client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
+			Transport: &http.Transport{}, // No TLS config needed for HTTP
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
 		},
+		URL:    url,
+		Name:   name,
 	}
 }
 
 // Execute implements the ProbeExecutor interface, performing an HTTP GET request.
 func (p *HTTPGetProbe) Execute(ctx context.Context) (ProbeResult, error) {
 	start := time.Now() // Start latency measurement here
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", p.URL, nil)
 	if err != nil {
-		return NewProbeResult("", 0, 0, 0, err), err 
+		return NewProbeResult(p.Name, 0, 0, 0, err), err
 	}
 
 	resp, err := p.Client.Do(req)
 	latency := time.Since(start).Seconds() // Calculate latency here
 	if err != nil {
-		return NewProbeResult("", 0, latency, 0, err), err
+		return NewProbeResult(p.Name, 0, latency, 0, err), err
 	}
 	defer resp.Body.Close()
 
-	return NewProbeResult("", 1, latency, resp.StatusCode, nil), nil
+	return NewProbeResult(p.Name, 1, latency, resp.StatusCode, nil), nil
 }
 
 // HTTPSProbe is an implementation of ProbeExecutor for executing HTTPS GET requests.
@@ -130,4 +132,3 @@ func (p *HTTPProbe) Execute(ctx context.Context) (ProbeResult, error) {
 
 	return NewProbeResult(p.Name, 1, latency, resp.StatusCode, nil), nil
 }
-
