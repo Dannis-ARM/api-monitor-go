@@ -9,16 +9,16 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-// API 定义了要监控的 API 的结构
+// API defines the structure of an API to be monitored.
 type API struct {
-	Name        string `yaml:"name,omitempty"`        // 用于 Prometheus 标签，如果未提供将自动生成或从 Description 派生
-	URL         string `yaml:"url"`                   // API 的 URL 的路径部分（不包含协议和主机）
-	Protocol    string `yaml:"protocol,omitempty"`    // API 的协议 (http/https), 默认为 https
-	Description string `yaml:"description,omitempty"` // 对应 sample-config.yaml 中的 description
-	Region      string `yaml:"region,omitempty"`      // 可选的区域标签，如果 YAML 未指定则为空
+	Name        string `yaml:"name,omitempty"`        // Used for Prometheus labels; auto-generated or derived from Description if not provided.
+	URL         string `yaml:"url"`                   // Path part of the API's URL (without protocol and host).
+	Protocol    string `yaml:"protocol,omitempty"`    // API's protocol (http/https), defaults to https.
+	Description string `yaml:"description,omitempty"` // Corresponds to description in sample-config.yaml.
+	Region      string `yaml:"region,omitempty"`      // Optional region label, empty if not specified in YAML.
 }
 
-// MonitorConfig 定义了监控服务的通用配置
+// MonitorConfig defines the general configuration for the monitoring service.
 type MonitorConfig struct {
 	APITimeout       string `yaml:"api_timeout"`
 	APIProbeInterval string `yaml:"api_probe_interval"`
@@ -27,24 +27,24 @@ type MonitorConfig struct {
 	MetricsPort      string `yaml:"metrics_port"`
 }
 
-// YAMLConfig 定义了 YAML 配置文件的结构
+// YAMLConfig defines the structure of the YAML configuration file.
 type YAMLConfig struct {
 	MonitorConfig MonitorConfig `yaml:"monitor_config"`
 	MonitorAPIs   []API         `yaml:"monitor_apis"`
 }
 
-// LoadYAMLConfig 从 YAML 文件加载 API 配置。
+// LoadYAMLConfig loads API configuration from a YAML file.
 func LoadYAMLConfig(filePath string) (*YAMLConfig, error) {
-	// 解析文件路径：如果是相对路径，则在当前工作目录中查找
-	if !filepath.IsAbs(filePath) { // 使用 filepath.IsAbs 检查绝对路径
+	// Parse file path: if it's a relative path, look for it in the current working directory.
+	if !filepath.IsAbs(filePath) { // Use filepath.IsAbs to check for absolute path.
 		cwd, err := os.Getwd()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current working directory: %w", err)
 		}
-		filePath = filepath.Join(cwd, filePath) // 使用 filepath.Join 安全地连接路径
+		filePath = filepath.Join(cwd, filePath) // Use filepath.Join to safely concatenate paths.
 	}
 
-	// 确保文件路径有 .yaml 后缀
+	// Ensure the file path has a .yaml extension.
 	if filepath.Ext(filePath) == "" {
 		filePath += ".yaml"
 	}
@@ -60,7 +60,7 @@ func LoadYAMLConfig(filePath string) (*YAMLConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal YAML data from %s: %w", filePath, err)
 	}
 
-	// 如果 Name 为空，尝试从 Description 派生或生成默认名称
+	// If Name is empty, try to derive it from Description or generate a default name.
 	for i := range config.MonitorAPIs {
 		if config.MonitorAPIs[i].Name == "" {
 			if config.MonitorAPIs[i].Description != "" {
@@ -69,30 +69,30 @@ func LoadYAMLConfig(filePath string) (*YAMLConfig, error) {
 				config.MonitorAPIs[i].Name = fmt.Sprintf("api_yaml_%d", i+1)
 			}
 		}
-		// 如果 Region 为空，保持为空，后续可由命令行参数中的 defaultRegion 填充
+		// If Region is empty, keep it empty; it can be populated later by defaultRegion from command line arguments.
 		if config.MonitorAPIs[i].Region == "" {
 			config.MonitorAPIs[i].Region = ""
 		}
 	}
 
-	// 处理 API URL，根据 protocol 字段构建完整的 URL
+	// Process API URLs, constructing the full URL based on the protocol field.
 	var validAPIs []API
 	for _, api := range config.MonitorAPIs {
 		protocol := api.Protocol
 		if protocol == "" {
-			protocol = "https" // 默认协议为 https
+			protocol = "https" // Default protocol is https.
 		}
 
 		fullURL := fmt.Sprintf("%s://%s", protocol, api.URL)
 		parsedURL, err := url.Parse(fullURL)
 		if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
 			FmtLog(LogLevelError, "Invalid API URL format for API '%s': %s. Skipping this API.", api.Name, fullURL)
-			continue // 跳过无效的 URL
+			continue // Skip invalid URLs.
 		}
-		api.URL = fullURL // 更新为完整的 URL
+		api.URL = fullURL // Update to the full URL.
 		validAPIs = append(validAPIs, api)
 	}
-	config.MonitorAPIs = validAPIs // 更新配置中的 API 列表
+	config.MonitorAPIs = validAPIs // Update the API list in the configuration.
 
 	return &config, nil
 }

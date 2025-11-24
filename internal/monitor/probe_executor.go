@@ -4,20 +4,20 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
-	"strings" // 导入 strings 包
+	"strings"
 )
 
-// ProbeExecutor 定义了执行 API 探测的接口。
+// ProbeExecutor defines the interface for executing API probes.
 type ProbeExecutor interface {
-	Execute(ctx context.Context, url string) (*http.Response, error)
+	Execute(ctx context.Context, url string) (ProbeResult, error)
 }
 
-// HTTPGetProbe 是 ProbeExecutor 的一个实现，用于执行 HTTP GET 请求。
+// HTTPGetProbe is an implementation of ProbeExecutor for executing HTTP GET requests.
 type HTTPGetProbe struct {
 	Client *http.Client
 }
 
-// NewHTTPGetProbe 创建并返回一个新的 HTTPGetProbe 实例。
+// NewHTTPGetProbe creates and returns a new HTTPGetProbe instance.
 func NewHTTPGetProbe() *HTTPGetProbe {
 	return &HTTPGetProbe{
 		Client: &http.Client{
@@ -31,23 +31,31 @@ func NewHTTPGetProbe() *HTTPGetProbe {
 	}
 }
 
-// Execute 实现 ProbeExecutor 接口，执行一个 HTTP GET 请求。
-func (p *HTTPGetProbe) Execute(ctx context.Context, url string) (*http.Response, error) {
+// Execute implements the ProbeExecutor interface, performing an HTTP GET request.
+func (p *HTTPGetProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return NewProbeResult("", "", 0, 0, 0, err, WithRegion("")), err
 	}
-	return p.Client.Do(req)
+
+	resp, err := p.Client.Do(req)
+	if err != nil {
+		return NewProbeResult("", "", 0, 0, 0, err, WithRegion("")), err
+	}
+	defer resp.Body.Close()
+
+	return NewProbeResult("", "", 1, 0, resp.StatusCode, nil, WithRegion("")), nil
 }
 
-// HTTPPostProbe 是 ProbeExecutor 的一个实现，用于执行 HTTP POST 请求，支持自定义 Headers 和 Body。
+// HTTPPostProbe is an implementation of ProbeExecutor for executing HTTP POST requests,
+// supporting custom Headers and Body.
 type HTTPPostProbe struct {
 	Client  *http.Client
 	Headers map[string]string
 	Body    string // For simplicity, body is a string. In real applications, it might be an io.Reader or []byte.
 }
 
-// NewHTTPPostProbe 创建并返回一个新的 HTTPPostProbe 实例。
+// NewHTTPPostProbe creates and returns a new HTTPPostProbe instance.
 func NewHTTPPostProbe(headers map[string]string, body string) *HTTPPostProbe {
 	return &HTTPPostProbe{
 		Client: &http.Client{
@@ -63,16 +71,22 @@ func NewHTTPPostProbe(headers map[string]string, body string) *HTTPPostProbe {
 	}
 }
 
-// Execute 实现 ProbeExecutor 接口，执行一个 HTTP POST 请求。
-func (p *HTTPPostProbe) Execute(ctx context.Context, url string) (*http.Response, error) {
+// Execute implements the ProbeExecutor interface, performing an HTTP POST request.
+func (p *HTTPPostProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(p.Body))
 	if err != nil {
-		return nil, err
+		return NewProbeResult("", "", 0, 0, 0, err, WithRegion("")), err
 	}
 
 	for key, value := range p.Headers {
 		req.Header.Set(key, value)
 	}
 
-	return p.Client.Do(req)
+	resp, err := p.Client.Do(req)
+	if err != nil {
+		return NewProbeResult("", "", 0, 0, 0, err, WithRegion("")), err
+	}
+	defer resp.Body.Close()
+
+	return NewProbeResult("", "", 1, 0, resp.StatusCode, nil, WithRegion("")), nil
 }

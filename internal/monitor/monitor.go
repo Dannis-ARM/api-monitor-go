@@ -2,7 +2,7 @@ package monitor
 
 import (
 	"context"
-	"log" // 仅保留 log 用于 http.ListenAndServe 的 Fatal
+	"log" // log is kept only for http.ListenAndServe's Fatal
 	"net/http"
 	"sync"
 	"time"
@@ -13,7 +13,7 @@ import (
 
 var httGetProber = NewHTTPGetProbe()
 
-// probeAPI 执行单个 API 的探测。
+// probeAPI performs the probing for a single API.
 func probeAPI(executor ProbeExecutor, api API, apiTimeout time.Duration, currentEnv string) {
 	FmtLog(LogLevelInfo, "Probing %s at %s...", api.Name, api.URL)
 	start := time.Now()
@@ -21,48 +21,51 @@ func probeAPI(executor ProbeExecutor, api API, apiTimeout time.Duration, current
 	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
-	resp, err := executor.Execute(ctx, api.URL)
-	latency := time.Since(start).Seconds()
+	probeResult, err := executor.Execute(ctx, api.URL)
+	probeResult.APIName = api.Name
+	probeResult.Region = api.Region
+	probeResult.Env = currentEnv
+	probeResult.Latency = time.Since(start).Seconds() // Record actual latency
 
 	if err != nil {
 		FmtLog(LogLevelError, "  -> FAILED, error: %v", err)
 		APIStatusGauge.With(
-			prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
+			prometheus.Labels{"api_name": probeResult.APIName, "env": probeResult.Env, "region": probeResult.Region}).
 			Set(0)
 		APILatencyGauge.With(
-			prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
-			Set(apiTimeout.Seconds())
+			prometheus.Labels{"api_name": probeResult.APIName, "env": probeResult.Env, "region": probeResult.Region}).
+			Set(apiTimeout.Seconds()) // Record timeout duration on failure
 		return
 	}
-	defer resp.Body.Close()
 
-	FmtLog(LogLevelInfo, "  -> SUCCESS (TLS connected), response time: %.2fs", latency)
+	FmtLog(LogLevelInfo, "  -> SUCCESS (TLS connected), response time: %.2fs, status code: %d", probeResult.Latency, probeResult.StatusCode)
 	APIStatusGauge.With(
-		prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
+		prometheus.Labels{"api_name": probeResult.APIName, "env": probeResult.Env, "region": probeResult.Region}).
 		Set(1)
 	APILatencyGauge.With(
-		prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
-		Set(latency)
+		prometheus.Labels{"api_name": probeResult.APIName, "env": probeResult.Env, "region": probeResult.Region}).
+		Set(probeResult.Latency)
 }
 
-// probeSingleAPI 是一个辅助函数，用于在一个 goroutine 中探测单个 API。
+// probeSingleAPI is a helper function to probe a single API in a goroutine.
 func probeSingleAPI(api API, apiTimeout time.Duration, currentEnv string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	// 默认使用 HTTPGetProbe。如果需要其他类型，需要在此处根据逻辑创建对应的 ProbeExecutor 实例。
+	// Default to using HTTPGetProbe. If other types are needed,
+	// corresponding ProbeExecutor instances should be created here based on logic.
 	probeAPI(httGetProber, api, apiTimeout, currentEnv)
 }
 
-// StartMonitoring 启动 API 监控服务。
+// StartMonitoring starts the API monitoring service.
 func StartMonitoring(
 	apis []API,
 	apiTimeout,
 	apiProbeInterval time.Duration,
 	currentEnv string,
 	metricsPort string) {
-	// 注册 Prometheus 指标
+	// Register Prometheus metrics
 	RegisterMetrics()
 
-	// 启动 goroutine 定期探测 API
+	// Start a goroutine to periodically probe APIs
 	go func() {
 		for {
 			var wg sync.WaitGroup
@@ -70,14 +73,14 @@ func StartMonitoring(
 				wg.Add(1)
 				go probeSingleAPI(api, apiTimeout, currentEnv, &wg)
 			}
-			wg.Wait() // 等待所有探测完成
+			wg.Wait() // Wait for all probes to complete
 
 			FmtLog(LogLevelInfo, "Waiting for %v before the next probe...", apiProbeInterval)
 			time.Sleep(apiProbeInterval)
 		}
 	}()
 
-	// 启动 HTTP 服务器暴露指标
+	// Start an HTTP server to expose metrics
 	http.Handle("/metrics", promhttp.Handler())
 	FmtLog(LogLevelInfo, "Prometheus metrics server started on http://localhost%s", metricsPort)
 	log.Fatal(http.ListenAndServe(metricsPort, nil))
