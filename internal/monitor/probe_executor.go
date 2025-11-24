@@ -36,15 +36,101 @@ func (p *HTTPGetProbe) Execute(ctx context.Context, url string) (ProbeResult, er
 	start := time.Now() // Start latency measurement here
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return NewProbeResult("", 0, 0, 0, err), err
+		return NewProbeResult("", "", 0, 0, 0, err), err 
 	}
 
 	resp, err := p.Client.Do(req)
 	latency := time.Since(start).Seconds() // Calculate latency here
 	if err != nil {
-		return NewProbeResult("", 0, latency, 0, err), err
+		return NewProbeResult("", "", 0, latency, 0, err), err
 	}
 	defer resp.Body.Close()
 
-	return NewProbeResult("", 1, latency, resp.StatusCode, nil), nil
+	return NewProbeResult("", "", 1, latency, resp.StatusCode, nil), nil
+}
+
+// HTTPSProbe is an implementation of ProbeExecutor for executing HTTPS GET requests.
+type HTTPSProbe struct {
+	Client *http.Client
+	URL    string
+	Name   string
+	Region string
+}
+
+// NewHTTPSProbe creates and returns a new HTTPSProbe instance.
+func NewHTTPSProbe(url, name, region string) *HTTPSProbe {
+	return &HTTPSProbe{
+		Client: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		URL:    url,
+		Name:   name,
+		Region: region,
+	}
+}
+
+// Execute implements the ProbeExecutor interface, performing an HTTPS GET request.
+func (p *HTTPSProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
+	start := time.Now() // Start latency measurement here
+	req, err := http.NewRequestWithContext(ctx, "GET", p.URL, nil)
+	if err != nil {
+		return NewProbeResult(p.Name, p.Region, 0, 0, 0, err), err
+	}
+
+	resp, err := p.Client.Do(req)
+	latency := time.Since(start).Seconds() // Calculate latency here
+	if err != nil {
+		return NewProbeResult(p.Name, p.Region, 0, latency, 0, err), err
+	}
+	defer resp.Body.Close()
+
+	return NewProbeResult(p.Name, p.Region, 1, latency, resp.StatusCode, nil), nil
+}
+
+// HTTPProbe is an implementation of ProbeExecutor for executing HTTP GET requests.
+type HTTPProbe struct {
+	Client *http.Client
+	URL    string
+	Name   string
+	Region string
+}
+
+// NewHTTPProbe creates and returns a new HTTPProbe instance.
+func NewHTTPProbe(url, name, region string) *HTTPProbe {
+	return &HTTPProbe{
+		Client: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		URL:    url,
+		Name:   name,
+		Region: region,
+	}
+}
+
+// Execute implements the ProbeExecutor interface, performing an HTTP GET request.
+func (p *HTTPProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
+	start := time.Now() // Start latency measurement here
+	req, err := http.NewRequestWithContext(ctx, "GET", p.URL, nil)
+	if err != nil {
+		return NewProbeResult(p.Name, p.Region, 0, 0, 0, err), err
+	}
+
+	resp, err := p.Client.Do(req)
+	latency := time.Since(start).Seconds() // Calculate latency here
+	if err != nil {
+		return NewProbeResult(p.Name, p.Region, 0, latency, 0, err), err
+	}
+	defer resp.Body.Close()
+
+	return NewProbeResult(p.Name, p.Region, 1, latency, resp.StatusCode, nil), nil
 }

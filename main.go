@@ -9,27 +9,18 @@ import (
 )
 
 func main() {
-	var configFilePath string
 	var envOverride string
 
 	// Command-line argument parsing
-	flag.StringVar(&configFilePath, "config", "", "Path to the YAML configuration file for APIs")
 	flag.StringVar(&envOverride, "env", "", "Override the current environment (e.g., 'dev', 'prod')")
 	flag.Parse()
 
-	monitor.FmtLog(monitor.LogLevelInfo, "Config file path received: %s", configFilePath)
 	if envOverride != "" {
 		monitor.FmtLog(monitor.LogLevelInfo, "Environment override received from command line: %s", envOverride)
 	}
 
-	if configFilePath == "" {
-		monitor.FmtLog(monitor.LogLevelError, "No configuration file path provided. Use -config flag.")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	// Load configuration
-	cfg, err := monitor.LoadYAMLConfig(configFilePath)
+	// Load configuration from hardcoded path, as API definitions are now hardcoded
+	cfg, err := monitor.LoadYAMLConfig("configs/application.yaml")
 	if err != nil {
 		monitor.FmtLog(monitor.LogLevelError, "Error loading configuration: %v", err)
 		os.Exit(1)
@@ -53,19 +44,11 @@ func main() {
 		currentEnv = envOverride
 	}
 
-	defaultRegion := cfg.MonitorConfig.DefaultRegion
 	metricsPort := cfg.MonitorConfig.MetricsPort
 
-	// Apply default region to APIs that do not specify one
-	for i := range cfg.MonitorAPIs {
-		if cfg.MonitorAPIs[i].Region == "" {
-			cfg.MonitorAPIs[i].Region = defaultRegion
-		}
-	}
-
 	monitor.FmtLog(monitor.LogLevelInfo, "Monitoring environment: %s", currentEnv)
-	monitor.FmtLog(monitor.LogLevelInfo, "Loaded %d APIs from %s", len(cfg.MonitorAPIs), configFilePath)
+	monitor.FmtLog(monitor.LogLevelInfo, "APIs are hardcoded in monitor.StartMonitoring")
 
 	// Start the monitoring service
-	monitor.StartMonitoring(cfg.MonitorAPIs, apiTimeout, apiProbeInterval, currentEnv, metricsPort)
+	monitor.StartMonitoring(apiTimeout, apiProbeInterval, currentEnv, metricsPort)
 }

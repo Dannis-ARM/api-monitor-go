@@ -4,20 +4,3 @@ monitor_config:
   current_env: "dev"
   default_region: ""
   metrics_port: ":8000"
-monitor_apis:
-  - url: www.google.com
-    name: "goolge"
-    region: "us-east-1"
-    protocol: "https"
-  - url: www.lala.com
-    name: "lala!"
-    region: "eu-west-1"
-    protocol: "https"
-  - url: 180.101.51.73
-    name: "baiduraw!"
-    region: "cn-north-1"
-    protocol: "http"
-  - url: invalid-url
-    name: "invalid-example"
-    region: "us-west-2"
-    protocol: "https"

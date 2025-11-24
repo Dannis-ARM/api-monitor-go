@@ -11,48 +11,57 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var httGetProber = NewHTTPGetProbe()
-
 // probeAPI performs the probing for a single API.
-func probeAPI(executor ProbeExecutor, api API, apiTimeout time.Duration, currentEnv string) {
-	FmtLog(LogLevelInfo, "Probing %s at %s...", api.Name, api.URL)
+func probeAPI(executor ProbeExecutor, apiTimeout time.Duration, currentEnv string) {
+	// Get API name and region from the ProbeExecutor instance if available,
+	// or use a generic name/region if not directly accessible.
+	// For the new probes (HTTPSProbe, HTTPProbe, InvalidURLProbe), these fields are available.
+	// For HTTPGetProbe, they are not, so we use default empty strings.
+	apiName := ""
+	apiRegion := ""
+	if p, ok := executor.(*HTTPSProbe); ok {
+		apiName = p.Name
+		apiRegion = p.Region
+	} else if p, ok := executor.(*HTTPProbe); ok {
+		apiName = p.Name
+		apiRegion = p.Region
+	} 
+
+	FmtLog(LogLevelInfo, "Probing %s in %s...", apiName, apiRegion)
 
 	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
-	probeResult, err := executor.Execute(ctx, api.URL)
+	probeResult, err := executor.Execute(ctx, "") // URL is now hardcoded within the probe executor
 
 	if err != nil {
 		FmtLog(LogLevelError, "  -> FAILED, error: %v", err)
 		APIStatusGauge.With(
-			prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
+			prometheus.Labels{"api_name": probeResult.APIName, "env": currentEnv, "region": probeResult.Region}).
 			Set(0)
 		APILatencyGauge.With(
-			prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
+			prometheus.Labels{"api_name": probeResult.APIName, "env": currentEnv, "region": probeResult.Region}).
 			Set(apiTimeout.Seconds()) // Record timeout duration on failure
 		return
 	}
 
 	FmtLog(LogLevelInfo, "  -> SUCCESS (TLS connected), response time: %.2fs, status code: %d", probeResult.Latency, probeResult.StatusCode)
 	APIStatusGauge.With(
-		prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
+		prometheus.Labels{"api_name": probeResult.APIName, "env": currentEnv, "region": probeResult.Region}).
 		Set(1)
 	APILatencyGauge.With(
-		prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
+		prometheus.Labels{"api_name": probeResult.APIName, "env": currentEnv, "region": probeResult.Region}).
 		Set(probeResult.Latency)
 }
 
 // probeSingleAPI is a helper function to probe a single API in a goroutine.
-func probeSingleAPI(api API, apiTimeout time.Duration, currentEnv string, wg *sync.WaitGroup) {
+func probeSingleAPI(executor ProbeExecutor, apiTimeout time.Duration, currentEnv string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	// Default to using HTTPGetProbe. If other types are needed,
-	// corresponding ProbeExecutor instances should be created here based on logic.
-	probeAPI(httGetProber, api, apiTimeout, currentEnv)
+	probeAPI(executor, apiTimeout, currentEnv)
 }
 
 // StartMonitoring starts the API monitoring service.
 func StartMonitoring(
-	apis []API,
 	apiTimeout,
 	apiProbeInterval time.Duration,
 	currentEnv string,
@@ -60,13 +69,20 @@ func StartMonitoring(
 	// Register Prometheus metrics
 	RegisterMetrics()
 
+	// Hardcode API probes
+	probes := []ProbeExecutor{
+		NewHTTPSProbe("https://www.google.com", "google", "us-east-1"),
+		NewHTTPSProbe("https://www.lala.com", "lala", "eu-west-1"),
+		NewHTTPProbe("http://180.101.51.73", "baiduraw", "cn-north-1"),
+	}
+
 	// Start a goroutine to periodically probe APIs
 	go func() {
 		for {
 			var wg sync.WaitGroup
-			for _, api := range apis {
+			for _, probe := range probes {
 				wg.Add(1)
-				go probeSingleAPI(api, apiTimeout, currentEnv, &wg)
+				go probeSingleAPI(probe, apiTimeout, currentEnv, &wg)
 			}
 			wg.Wait() // Wait for all probes to complete
 
