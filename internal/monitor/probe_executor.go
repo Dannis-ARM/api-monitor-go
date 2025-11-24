@@ -2,14 +2,14 @@ package monitor
 
 import (
 	"context"
-	"crypto/tls"
+	"crypto/tls" // Added for InvalidURLProbe
 	"net/http"
 	"time"
 )
 
 // ProbeExecutor defines the interface for executing API probes.
 type ProbeExecutor interface {
-	Execute(ctx context.Context, url string) (ProbeResult, error)
+	Execute(ctx context.Context) (ProbeResult, error)
 }
 
 // HTTPGetProbe is an implementation of ProbeExecutor for executing HTTP GET requests.
@@ -32,21 +32,21 @@ func NewHTTPGetProbe() *HTTPGetProbe {
 }
 
 // Execute implements the ProbeExecutor interface, performing an HTTP GET request.
-func (p *HTTPGetProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
+func (p *HTTPGetProbe) Execute(ctx context.Context) (ProbeResult, error) {
 	start := time.Now() // Start latency measurement here
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return NewProbeResult("", "", 0, 0, 0, err), err 
+		return NewProbeResult("", 0, 0, 0, err), err 
 	}
 
 	resp, err := p.Client.Do(req)
 	latency := time.Since(start).Seconds() // Calculate latency here
 	if err != nil {
-		return NewProbeResult("", "", 0, latency, 0, err), err
+		return NewProbeResult("", 0, latency, 0, err), err
 	}
 	defer resp.Body.Close()
 
-	return NewProbeResult("", "", 1, latency, resp.StatusCode, nil), nil
+	return NewProbeResult("", 1, latency, resp.StatusCode, nil), nil
 }
 
 // HTTPSProbe is an implementation of ProbeExecutor for executing HTTPS GET requests.
@@ -54,11 +54,10 @@ type HTTPSProbe struct {
 	Client *http.Client
 	URL    string
 	Name   string
-	Region string
 }
 
 // NewHTTPSProbe creates and returns a new HTTPSProbe instance.
-func NewHTTPSProbe(url, name, region string) *HTTPSProbe {
+func NewHTTPSProbe(url, name string) *HTTPSProbe {
 	return &HTTPSProbe{
 		Client: &http.Client{
 			Transport: &http.Transport{
@@ -70,26 +69,25 @@ func NewHTTPSProbe(url, name, region string) *HTTPSProbe {
 		},
 		URL:    url,
 		Name:   name,
-		Region: region,
 	}
 }
 
 // Execute implements the ProbeExecutor interface, performing an HTTPS GET request.
-func (p *HTTPSProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
+func (p *HTTPSProbe) Execute(ctx context.Context) (ProbeResult, error) {
 	start := time.Now() // Start latency measurement here
 	req, err := http.NewRequestWithContext(ctx, "GET", p.URL, nil)
 	if err != nil {
-		return NewProbeResult(p.Name, p.Region, 0, 0, 0, err), err
+		return NewProbeResult(p.Name, 0, 0, 0, err), err
 	}
 
 	resp, err := p.Client.Do(req)
 	latency := time.Since(start).Seconds() // Calculate latency here
 	if err != nil {
-		return NewProbeResult(p.Name, p.Region, 0, latency, 0, err), err
+		return NewProbeResult(p.Name, 0, latency, 0, err), err
 	}
 	defer resp.Body.Close()
 
-	return NewProbeResult(p.Name, p.Region, 1, latency, resp.StatusCode, nil), nil
+	return NewProbeResult(p.Name, 1, latency, resp.StatusCode, nil), nil
 }
 
 // HTTPProbe is an implementation of ProbeExecutor for executing HTTP GET requests.
@@ -97,11 +95,10 @@ type HTTPProbe struct {
 	Client *http.Client
 	URL    string
 	Name   string
-	Region string
 }
 
 // NewHTTPProbe creates and returns a new HTTPProbe instance.
-func NewHTTPProbe(url, name, region string) *HTTPProbe {
+func NewHTTPProbe(url, name string) *HTTPProbe {
 	return &HTTPProbe{
 		Client: &http.Client{
 			Transport: &http.Transport{
@@ -113,24 +110,24 @@ func NewHTTPProbe(url, name, region string) *HTTPProbe {
 		},
 		URL:    url,
 		Name:   name,
-		Region: region,
 	}
 }
 
 // Execute implements the ProbeExecutor interface, performing an HTTP GET request.
-func (p *HTTPProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
+func (p *HTTPProbe) Execute(ctx context.Context) (ProbeResult, error) {
 	start := time.Now() // Start latency measurement here
 	req, err := http.NewRequestWithContext(ctx, "GET", p.URL, nil)
 	if err != nil {
-		return NewProbeResult(p.Name, p.Region, 0, 0, 0, err), err
+		return NewProbeResult(p.Name, 0, 0, 0, err), err
 	}
 
 	resp, err := p.Client.Do(req)
 	latency := time.Since(start).Seconds() // Calculate latency here
 	if err != nil {
-		return NewProbeResult(p.Name, p.Region, 0, latency, 0, err), err
+		return NewProbeResult(p.Name, 0, latency, 0, err), err
 	}
 	defer resp.Body.Close()
 
-	return NewProbeResult(p.Name, p.Region, 1, latency, resp.StatusCode, nil), nil
+	return NewProbeResult(p.Name, 1, latency, resp.StatusCode, nil), nil
 }
+

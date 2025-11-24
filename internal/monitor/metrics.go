@@ -5,27 +5,26 @@ import (
 )
 
 var (
-	// 定义 Prometheus 指标
-	// apiStatusGauge 使用 Gauge 指标，1 表示成功，0 表示失败
+	// APIStatusGauge uses a Gauge metric, 1 for success, 0 for failure.
 	APIStatusGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "api_availability_status",
 			Help: "API availability status (1 for up, 0 for down)",
 		},
-		[]string{"api_name", "env", "region"}, // 使用标签区分不同的 API、环境和区域
+		[]string{"api_name", "env"}, // Labels to distinguish different APIs and environments
 	)
 
-	// apiLatencyGauge 使用 Gauge 记录 API 响应时间
+	// APILatencyGauge uses a Gauge to record API response time.
 	APILatencyGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "api_response_seconds",
 			Help: "API response time in seconds",
 		},
-		[]string{"api_name", "env", "region"}, // 使用标签区分不同的 API、环境和区域
+		[]string{"api_name", "env"}, // Labels to distinguish different APIs and environments
 	)
 )
 
-// RegisterMetrics 注册 Prometheus 指标
+// RegisterMetrics registers Prometheus metrics.
 func RegisterMetrics() {
 	prometheus.MustRegister(APIStatusGauge)
 	prometheus.MustRegister(APILatencyGauge)
