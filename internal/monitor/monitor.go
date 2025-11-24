@@ -16,34 +16,29 @@ var httGetProber = NewHTTPGetProbe()
 // probeAPI performs the probing for a single API.
 func probeAPI(executor ProbeExecutor, api API, apiTimeout time.Duration, currentEnv string) {
 	FmtLog(LogLevelInfo, "Probing %s at %s...", api.Name, api.URL)
-	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
 	probeResult, err := executor.Execute(ctx, api.URL)
-	probeResult.APIName = api.Name
-	probeResult.Region = api.Region
-	probeResult.Env = currentEnv
-	probeResult.Latency = time.Since(start).Seconds() // Record actual latency
 
 	if err != nil {
 		FmtLog(LogLevelError, "  -> FAILED, error: %v", err)
 		APIStatusGauge.With(
-			prometheus.Labels{"api_name": probeResult.APIName, "env": probeResult.Env, "region": probeResult.Region}).
+			prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
 			Set(0)
 		APILatencyGauge.With(
-			prometheus.Labels{"api_name": probeResult.APIName, "env": probeResult.Env, "region": probeResult.Region}).
+			prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
 			Set(apiTimeout.Seconds()) // Record timeout duration on failure
 		return
 	}
 
 	FmtLog(LogLevelInfo, "  -> SUCCESS (TLS connected), response time: %.2fs, status code: %d", probeResult.Latency, probeResult.StatusCode)
 	APIStatusGauge.With(
-		prometheus.Labels{"api_name": probeResult.APIName, "env": probeResult.Env, "region": probeResult.Region}).
+		prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
 		Set(1)
 	APILatencyGauge.With(
-		prometheus.Labels{"api_name": probeResult.APIName, "env": probeResult.Env, "region": probeResult.Region}).
+		prometheus.Labels{"api_name": api.Name, "env": currentEnv, "region": api.Region}).
 		Set(probeResult.Latency)
 }
 

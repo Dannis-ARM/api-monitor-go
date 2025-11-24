@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
-	"strings"
+	"time"
 )
 
 // ProbeExecutor defines the interface for executing API probes.
@@ -33,60 +33,18 @@ func NewHTTPGetProbe() *HTTPGetProbe {
 
 // Execute implements the ProbeExecutor interface, performing an HTTP GET request.
 func (p *HTTPGetProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
+	start := time.Now() // Start latency measurement here
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return NewProbeResult("", "", 0, 0, 0, err, WithRegion("")), err
+		return NewProbeResult("", 0, 0, 0, err), err
 	}
 
 	resp, err := p.Client.Do(req)
+	latency := time.Since(start).Seconds() // Calculate latency here
 	if err != nil {
-		return NewProbeResult("", "", 0, 0, 0, err, WithRegion("")), err
+		return NewProbeResult("", 0, latency, 0, err), err
 	}
 	defer resp.Body.Close()
 
-	return NewProbeResult("", "", 1, 0, resp.StatusCode, nil, WithRegion("")), nil
-}
-
-// HTTPPostProbe is an implementation of ProbeExecutor for executing HTTP POST requests,
-// supporting custom Headers and Body.
-type HTTPPostProbe struct {
-	Client  *http.Client
-	Headers map[string]string
-	Body    string // For simplicity, body is a string. In real applications, it might be an io.Reader or []byte.
-}
-
-// NewHTTPPostProbe creates and returns a new HTTPPostProbe instance.
-func NewHTTPPostProbe(headers map[string]string, body string) *HTTPPostProbe {
-	return &HTTPPostProbe{
-		Client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
-		Headers: headers,
-		Body:    body,
-	}
-}
-
-// Execute implements the ProbeExecutor interface, performing an HTTP POST request.
-func (p *HTTPPostProbe) Execute(ctx context.Context, url string) (ProbeResult, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(p.Body))
-	if err != nil {
-		return NewProbeResult("", "", 0, 0, 0, err, WithRegion("")), err
-	}
-
-	for key, value := range p.Headers {
-		req.Header.Set(key, value)
-	}
-
-	resp, err := p.Client.Do(req)
-	if err != nil {
-		return NewProbeResult("", "", 0, 0, 0, err, WithRegion("")), err
-	}
-	defer resp.Body.Close()
-
-	return NewProbeResult("", "", 1, 0, resp.StatusCode, nil, WithRegion("")), nil
+	return NewProbeResult("", 1, latency, resp.StatusCode, nil), nil
 }
