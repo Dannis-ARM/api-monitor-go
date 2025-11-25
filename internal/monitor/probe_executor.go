@@ -132,3 +132,51 @@ func (p *HTTPProbe) Execute(ctx context.Context) (ProbeResult, error) {
 
 	return NewProbeResult(p.Name, 1, latency, resp.StatusCode, nil), nil
 }
+
+// BaiduHTTPSProbe is an implementation of ProbeExecutor specifically for HTTPS GET requests to Baidu.
+type BaiduHTTPSProbe struct {
+	HTTPSProbe // Embed HTTPSProbe
+}
+
+// NewBaiduHTTPSProbe creates and returns a new BaiduHTTPSProbe instance.
+func NewBaiduHTTPSProbe() *BaiduHTTPSProbe {
+	// Default URL and Name for Baidu HTTPS probe
+	baiduURL := "https://www.baidu.com"
+	baiduName := "BaiduHTTPSGetProbe"
+
+	return &BaiduHTTPSProbe{
+		HTTPSProbe: *NewHTTPSProbe(baiduURL, baiduName),
+	}
+}
+
+// LalaHTTPSProbe is an implementation of ProbeExecutor specifically for HTTPS GET requests to lala.com.
+type LalaHTTPSProbe struct {
+	HTTPSProbe // Embed HTTPSProbe
+}
+
+// NewLalaHTTPSProbe creates and returns a new LalaHTTPSProbe instance.
+func NewLalaHTTPSProbe() *LalaHTTPSProbe {
+	// Default URL and Name for Lala HTTPS probe
+	lalaURL := "https://www.lala.com"
+	lalaName := "lalahttpsgetprobe"
+
+	return &LalaHTTPSProbe{
+		HTTPSProbe: *NewHTTPSProbe(lalaURL, lalaName),
+	}
+}
+
+// IPHTTPProbe is an implementation of ProbeExecutor specifically for HTTP GET requests to a specific IP.
+type IPHTTPProbe struct {
+	HTTPProbe // Embed HTTPProbe
+}
+
+// NewIPHTTPProbe creates and returns a new IPHTTPProbe instance.
+func NewIPHTTPProbe() *IPHTTPProbe {
+	// Default URL and Name for IP HTTP probe
+	ipURL := "http://180.101.51.73"
+	ipName := "iphttpgetprobe"
+
+	return &IPHTTPProbe{
+		HTTPProbe: *NewHTTPProbe(ipURL, ipName),
+	}
+}
