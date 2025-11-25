@@ -10,17 +10,19 @@ import (
 
 func main() {
 	var envOverride string
+	var configPath string
 
 	// Command-line argument parsing
 	flag.StringVar(&envOverride, "env", "", "Override the current environment (e.g., 'dev', 'prod')")
+	flag.StringVar(&configPath, "config", "configs/application.yaml", "Path to the YAML configuration file")
 	flag.Parse()
 
 	if envOverride != "" {
 		monitor.FmtLog(monitor.LogLevelInfo, "Environment override received from command line: %s", envOverride)
 	}
 
-	// Load configuration from hardcoded path, as API definitions are now hardcoded
-	cfg, err := monitor.LoadYAMLConfig("configs/application.yaml")
+	// Load configuration from the specified path, defaulting to "configs/application.yaml" if not provided via --config.
+	cfg, err := monitor.LoadYAMLConfig(configPath)
 	if err != nil {
 		monitor.FmtLog(monitor.LogLevelError, "Error loading configuration: %v", err)
 		os.Exit(1)
