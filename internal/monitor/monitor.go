@@ -16,7 +16,7 @@ func probeAPI(executor ProbeExecutor, apiTimeout time.Duration, currentEnv strin
 	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
-	probeResult, err := executor.Execute(ctx) // URL is now hardcoded within the probe executor
+	probeResult, err := executor.Execute(ctx)
 
 	if err != nil {
 		FmtLog(LogLevelError, "  -> FAILED, error: %v", err)

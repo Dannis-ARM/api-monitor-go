@@ -3,4 +3,4 @@ monitor_config:
   api_probe_interval: "60s"
   current_env: "dev"
   default_region: ""
-  metrics_port: ":8000"
+  metrics_port: ":7999"
