@@ -2,5 +2,4 @@ monitor_config:
   api_timeout: "10s"
   api_probe_interval: "60s"
   current_env: "dev"
-  default_region: ""
   metrics_port: ":7999"

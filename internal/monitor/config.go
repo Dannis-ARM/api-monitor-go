@@ -13,7 +13,6 @@ type MonitorConfig struct {
 	APITimeout       string `yaml:"api_timeout"`
 	APIProbeInterval string `yaml:"api_probe_interval"`
 	CurrentEnv       string `yaml:"current_env"`
-	DefaultRegion    string `yaml:"default_region"`
 	MetricsPort      string `yaml:"metrics_port"`
 }
 
