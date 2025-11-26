@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"api-monitor/internal/cronutils"
 	"api-monitor/internal/monitor" // Import our internal package
 )
 
@@ -50,6 +51,9 @@ func main() {
 
 	monitor.FmtLog(monitor.LogLevelInfo, "Monitoring environment: %s", currentEnv)
 	monitor.FmtLog(monitor.LogLevelInfo, "APIs are hardcoded in monitor.StartMonitoring")
+
+	// Initialize and start the cron job
+	cronutils.InitCronJob()
 
 	// Start the monitoring service
 	monitor.StartMonitoring(apiTimeout, apiProbeInterval, currentEnv, metricsPort)
