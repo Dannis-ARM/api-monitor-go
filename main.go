@@ -56,5 +56,5 @@ func main() {
 	cronutils.InitCronJob()
 
 	// Start the monitoring service
-	monitor.StartMonitoring(apiTimeout, apiProbeInterval, currentEnv, metricsPort)
+	monitor.StartMonitoring(apiTimeout, apiProbeInterval, currentEnv, metricsPort, cfg.MonitorConfig.AWS)
 }

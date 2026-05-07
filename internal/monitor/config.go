@@ -8,12 +8,28 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
+// DirectConnectConfig defines configuration for AWS Direct Connect monitoring
+type DirectConnectConfig struct {
+	ConnectionIDs          []string `yaml:"connection_ids"`
+	CollectInterval        string   `yaml:"collect_interval"`
+	MetricsLookbackMinutes int      `yaml:"metrics_lookback_minutes"` // CloudWatch metrics lookback time, default 10 minutes
+}
+
+// AWSConfig defines AWS related configuration
+type AWSConfig struct {
+	Region         string               `yaml:"region"`
+	AccessKey      string               `yaml:"access_key"`
+	SecretKey      string               `yaml:"secret_key"`
+	DirectConnect  DirectConnectConfig  `yaml:"direct_connect"`
+}
+
 // MonitorConfig defines the general configuration for the monitoring service.
 type MonitorConfig struct {
 	APITimeout       string `yaml:"api_timeout"`
 	APIProbeInterval string `yaml:"api_probe_interval"`
 	CurrentEnv       string `yaml:"current_env"`
 	MetricsPort      string `yaml:"metrics_port"`
+	AWS              AWSConfig `yaml:"aws"`
 }
 
 // YAMLConfig defines the structure of the YAML configuration file.

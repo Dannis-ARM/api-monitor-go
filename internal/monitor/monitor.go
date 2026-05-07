@@ -44,37 +44,45 @@ func probeSingleAPI(executor ProbeExecutor, apiTimeout time.Duration, currentEnv
 	probeAPI(executor, apiTimeout, currentEnv)
 }
 
+
+
 // StartMonitoring starts the API monitoring service.
 func StartMonitoring(
 	apiTimeout,
 	apiProbeInterval time.Duration,
 	currentEnv string,
-	metricsPort string) {
+	metricsPort string,
+	awsConfig AWSConfig) {
 	// Register Prometheus metrics
 	RegisterMetrics()
 
 	// Hardcode API probes
 	// Define API probes.
-	probes := []ProbeExecutor{
+	apiProbes := []ProbeExecutor{
 		NewBaiduHTTPSProbe(), // Baidu HTTPS GET probe
 		NewLalaHTTPSProbe(),  // Lala HTTPS GET probe
 		NewIPHTTPProbe(),     // IP HTTP GET probe
 	}
-
-	// Start a goroutine to periodically probe APIs
+	
+	// Start a goroutine to periodically probe all resources
 	go func() {
 		for {
 			var wg sync.WaitGroup
-			for _, probe := range probes {
+			// Process API probes (generate API metrics)
+			for _, probe := range apiProbes {
 				wg.Add(1)
 				go probeSingleAPI(probe, apiTimeout, currentEnv, &wg)
 			}
-			wg.Wait() // Wait for all probes to complete
+			wg.Wait() // Wait for all API probes to complete
 
-			FmtLog(LogLevelInfo, "Waiting for %v before the next probe...", apiProbeInterval)
+			FmtLog(LogLevelInfo, "API probes completed, waiting for %v before next run...", apiProbeInterval)
 			time.Sleep(apiProbeInterval)
 		}
 	}()
+
+	// Start Direct Connect monitoring in its own dedicated goroutine
+	// This encapsulates DX probe creation and execution logic
+	StartDirectConnectMonitoring(awsConfig, apiTimeout, apiProbeInterval, currentEnv)
 
 	// Start an HTTP server to expose metrics
 	http.Handle("/metrics", promhttp.Handler())

@@ -3,3 +3,11 @@ monitor_config:
   api_probe_interval: "60s"
   current_env: "dev"
   metrics_port: ":7999"
+  aws:
+    region: "cn-northwest-1"
+    # access_key: "your_access_key" # Optional, if not provided will override default credential chain
+    # secret_key: "your_secret_key" # Optional
+    direct_connect:
+      connection_ids: ["dxcon-xxxxxx", "dxcon-yyyyyy"] # List of Direct Connect connection IDs to monitor
+      collect_interval: "300s" # 5 minutes, align with CloudWatch metric granularity
+      metrics_lookback_minutes: 10 # How far back to query CloudWatch metrics, default 10 minutes if not set
