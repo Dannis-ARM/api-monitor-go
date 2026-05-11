@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
-	"github.com/aws/aws-sdk-go-v2/service/directconnect"
 )
 
 // DirectConnectProbe implements ProbeExecutor for AWS Direct Connect monitoring
@@ -19,7 +18,6 @@ type DirectConnectProbe struct {
 	awsConfig       AWSConfig
 	currentEnv      string
 	cwClient        *cloudwatch.Client
-	dxClient        *directconnect.Client
 	connectionID    string
 	lookbackMinutes int
 }
@@ -62,7 +60,6 @@ func NewDirectConnectProbe(awsConfig AWSConfig, currentEnv string, connectionID 
 		awsConfig:       awsConfig,
 		currentEnv:      currentEnv,
 		cwClient:        cloudwatch.NewFromConfig(cfg),
-		dxClient:        directconnect.NewFromConfig(cfg),
 		connectionID:    connectionID,
 		lookbackMinutes: lookbackMinutes,
 	}, nil
@@ -82,17 +79,7 @@ func (p *DirectConnectProbe) Execute(ctx context.Context) (ProbeResult, error) {
 	// Set collection success to 0 by default
 	DirectConnectCollectSuccessGauge.WithLabelValues(p.connectionID, p.currentEnv).Set(0)
 
-	// 1. Get connection state
-	connectionState, err := p.getConnectionState(ctx)
-	if err != nil {
-		FmtLog(LogLevelError, "Failed to describe Direct Connect connection %s: %v", p.connectionID, err)
-		APIStatusGauge.WithLabelValues(apiName, p.currentEnv).Set(0)
-		APILatencyGauge.WithLabelValues(apiName, p.currentEnv).Set(time.Since(startTime).Seconds())
-		return NewProbeResult(apiName, 0, time.Since(startTime).Seconds(), 0, err), err
-	}
-	DirectConnectConnectionStateGauge.WithLabelValues(p.connectionID, p.currentEnv).Set(float64(connectionState))
-
-	// 2. Get CloudWatch metrics - use GetMetricData to batch fetch ALL metrics in ONE API call
+	// Get CloudWatch metrics - use GetMetricData to batch fetch ALL metrics in ONE API call
 	// This avoids hitting CloudWatch rate limits (400 TPS/account)
 	metrics := []dxMetric{
 		{"ConnectionBpsIngress", "Average"},
@@ -118,7 +105,7 @@ func (p *DirectConnectProbe) Execute(ctx context.Context) (ProbeResult, error) {
 		FmtLog(LogLevelError, "Failed to batch fetch metrics for %s: %v", p.connectionID, err)
 		APIStatusGauge.WithLabelValues(apiName, p.currentEnv).Set(0)
 		APILatencyGauge.WithLabelValues(apiName, p.currentEnv).Set(time.Since(startTime).Seconds())
-		return NewProbeResult(apiName, 0, time.Since(startTime).Seconds(), connectionState, err), err
+		return NewProbeResult(apiName, 0, time.Since(startTime).Seconds(), 0, err), err
 	}
 
 	// BPS metrics - critical for success
@@ -127,14 +114,14 @@ func (p *DirectConnectProbe) Execute(ctx context.Context) (ProbeResult, error) {
 		FmtLog(LogLevelError, "Failed to get inbound BPS metric for %s: %v", p.connectionID, err)
 		APIStatusGauge.WithLabelValues(apiName, p.currentEnv).Set(0)
 		APILatencyGauge.WithLabelValues(apiName, p.currentEnv).Set(time.Since(startTime).Seconds())
-		return NewProbeResult(apiName, 0, time.Since(startTime).Seconds(), connectionState, err), err
+		return NewProbeResult(apiName, 0, time.Since(startTime).Seconds(), 0, err), err
 	}
 	if _, ok := metricValues["ConnectionBpsEgress"]; !ok {
 		err := fmt.Errorf("ConnectionBpsEgress metric not found")
 		FmtLog(LogLevelError, "Failed to get outbound BPS metric for %s: %v", p.connectionID, err)
 		APIStatusGauge.WithLabelValues(apiName, p.currentEnv).Set(0)
 		APILatencyGauge.WithLabelValues(apiName, p.currentEnv).Set(time.Since(startTime).Seconds())
-		return NewProbeResult(apiName, 0, time.Since(startTime).Seconds(), connectionState, err), err
+		return NewProbeResult(apiName, 0, time.Since(startTime).Seconds(), 0, err), err
 	}
 
 	// Set all gauges
@@ -172,28 +159,11 @@ func (p *DirectConnectProbe) Execute(ctx context.Context) (ProbeResult, error) {
 	APIStatusGauge.WithLabelValues(apiName, p.currentEnv).Set(1)
 	APILatencyGauge.WithLabelValues(apiName, p.currentEnv).Set(time.Since(startTime).Seconds())
 
-	FmtLog(LogLevelInfo, "Direct Connect %s: In=%.2f bps, Out=%.2f bps, PPSIn=%.2f, PPSOut=%.2f, PacketLossIn=%.0f, PacketLossOut=%.0f, ErrorIn=%.0f, ErrorOut=%.0f, CRC=%.0f, State=%d",
-		p.connectionID, bpsIn, bpsOut, ppsIn, ppsOut, packetLossIn, packetLossOut, errorCountIn, errorCountOut, crcErrorCount, connectionState)
+	FmtLog(LogLevelInfo, "Direct Connect %s: In=%.2f bps, Out=%.2f bps, PPSIn=%.2f, PPSOut=%.2f, PacketLossIn=%.0f, PacketLossOut=%.0f, ErrorIn=%.0f, ErrorOut=%.0f, CRC=%.0f",
+		p.connectionID, bpsIn, bpsOut, ppsIn, ppsOut, packetLossIn, packetLossOut, errorCountIn, errorCountOut, crcErrorCount)
 
 	latency := time.Since(startTime).Seconds()
-	return NewProbeResult(apiName, 1, latency, connectionState, nil), nil
-}
-
-// getConnectionState retrieves the connection state from Direct Connect API
-func (p *DirectConnectProbe) getConnectionState(ctx context.Context) (int, error) {
-	dxInput := &directconnect.DescribeConnectionsInput{
-		ConnectionId: aws.String(p.connectionID),
-	}
-
-	dxResp, err := p.dxClient.DescribeConnections(ctx, dxInput)
-	if err != nil {
-		return 0, err
-	}
-
-	if len(dxResp.Connections) > 0 && dxResp.Connections[0].ConnectionState == "available" {
-		return 1, nil
-	}
-	return 0, nil
+	return NewProbeResult(apiName, 1, latency, 0, nil), nil
 }
 
 // getMetricsBatch fetches ALL CloudWatch metrics in a SINGLE GetMetricData API call
@@ -318,8 +288,8 @@ func executeDxProbes(probes []ProbeExecutor, apiTimeout time.Duration, currentEn
 				if err != nil {
 					FmtLog(LogLevelError, "Direct Connect probe %s failed: %v (latency=%.3fs)", connectionID, err, result.Latency)
 				} else {
-					FmtLog(LogLevelInfo, "Direct Connect probe %s completed successfully, State=%d, latency=%.3fs",
-						connectionID, result.StatusCode, result.Latency)
+					FmtLog(LogLevelInfo, "Direct Connect probe %s completed successfully, latency=%.3fs",
+						connectionID, result.Latency)
 				}
 			}
 		}(probe)
