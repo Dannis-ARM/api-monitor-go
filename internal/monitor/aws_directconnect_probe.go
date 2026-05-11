@@ -252,13 +252,29 @@ func createDxProbes(awsConfig AWSConfig, currentEnv string) []ProbeExecutor {
 	return dxProbes
 }
 
+const probeRefreshInterval = 30 * time.Minute // 每30分钟刷新一次probe以更新凭证
+
 // StartDirectConnectMonitoring creates Direct Connect probes and starts periodic monitoring in a dedicated goroutine
 // This is the only public API needed - it fully encapsulates both probe creation and execution
 func StartDirectConnectMonitoring(awsConfig AWSConfig, apiTimeout, probeInterval time.Duration, currentEnv string) {
 	probes := createDxProbes(awsConfig, currentEnv)
+	lastRefreshTime := time.Now()
 
 	go func() {
 		for {
+			// 每30分钟重新创建一次probe以刷新AWS凭证
+			if time.Since(lastRefreshTime) >= probeRefreshInterval {
+				FmtLog(LogLevelInfo, "Refreshing Direct Connect probes to renew AWS credentials...")
+				newProbes := createDxProbes(awsConfig, currentEnv)
+				if len(newProbes) > 0 {
+					probes = newProbes
+					lastRefreshTime = time.Now()
+					FmtLog(LogLevelInfo, "Successfully refreshed %d Direct Connect probes", len(probes))
+				} else {
+					FmtLog(LogLevelError, "Failed to refresh Direct Connect probes, continuing with existing probes")
+				}
+			}
+
 			var wg sync.WaitGroup
 			executeDxProbes(probes, apiTimeout, currentEnv, &wg)
 			wg.Wait()
