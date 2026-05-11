@@ -166,6 +166,24 @@ var (
 		},
 		[]string{"api_name", "env"},
 	)
+
+	// DXAPIStatusGauge records DX API availability status (1=up, 0=down)
+	DXAPIStatusGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "api_direct_connect_status",
+			Help: "DX API availability status (1 for up, 0 for down)",
+		},
+		[]string{"api_name", "env"},
+	)
+
+	// DXAPILatencyGauge records DX API response time in seconds
+	DXAPILatencyGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "api_direct_connect_response_seconds",
+			Help: "DX API response time in seconds",
+		},
+		[]string{"api_name", "env"},
+	)
 )
 
 // RegisterMetrics registers Prometheus metrics.
@@ -188,4 +206,6 @@ func RegisterMetrics() {
 	prometheus.MustRegister(DirectConnectAPIBPSOutGauge)
 	prometheus.MustRegister(DirectConnectAPIPPSInGauge)
 	prometheus.MustRegister(DirectConnectAPIPPSOutGauge)
+	prometheus.MustRegister(DXAPIStatusGauge)
+	prometheus.MustRegister(DXAPILatencyGauge)
 }
