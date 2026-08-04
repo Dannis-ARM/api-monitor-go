@@ -63,7 +63,7 @@ func StartMonitoring(
 		NewLalaHTTPSProbe(),  // Lala HTTPS GET probe
 		NewIPHTTPProbe(),     // IP HTTP GET probe
 	}
-	
+
 	// Start a goroutine to periodically probe all resources
 	go func() {
 		for {
@@ -83,6 +83,9 @@ func StartMonitoring(
 	// Start Direct Connect monitoring in its own dedicated goroutine
 	// This encapsulates DX probe creation and execution logic
 	StartDirectConnectMonitoring(awsConfig, apiTimeout, apiProbeInterval, currentEnv)
+
+	// Start AI health check monitoring in its own dedicated goroutine
+	StartAIMonitoring(apiTimeout, apiProbeInterval, currentEnv)
 
 	// Start an HTTP server to expose metrics
 	http.Handle("/metrics", promhttp.Handler())
