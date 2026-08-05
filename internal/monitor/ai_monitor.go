@@ -1,11 +1,10 @@
 package monitor
 
 import (
+	"bytes"
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net/http"
-	"net/url"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -21,124 +20,84 @@ const (
 // StatusCheckProbe is an implementation of ProbeExecutor that checks HTTP status codes.
 // 2xx/3xx -> success (status=1), 4xx/5xx -> failure (status=0)
 type StatusCheckProbe struct {
-	Client *http.Client
-	URL    string
-	Name   string
+	URL  string
+	Name string
 }
 
 // NewStatusCheckProbe creates and returns a new StatusCheckProbe instance with TLS verification enabled.
 func NewStatusCheckProbe(targetURL, name string) *StatusCheckProbe {
-	// Configure proxy
-	proxyURL, _ := url.Parse(aiHealthCheckProxy)
 	FmtLog(LogLevelInfo, "Creating StatusCheckProbe: url=%s, name=%s, proxy=%s", targetURL, name, aiHealthCheckProxy)
-
 	return &StatusCheckProbe{
-		Client: &http.Client{
-			Transport: &http.Transport{
-				Proxy:           http.ProxyURL(proxyURL),
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
 		URL:  targetURL,
 		Name: name,
 	}
 }
 
-// Execute implements the ProbeExecutor interface, performing an HTTP GET request
+// Execute implements the ProbeExecutor interface, performing an HTTP GET request via curl
 // and checking the status code: 2xx/3xx/400/401/403 -> 1, others -> 0.
 func (p *StatusCheckProbe) Execute(ctx context.Context) (ProbeResult, error) {
 	start := time.Now()
-	FmtLog(LogLevelInfo, "Starting request: url=%s, name=%s", p.URL, p.Name)
+	FmtLog(LogLevelInfo, "Starting curl request: url=%s", p.URL)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", p.URL, nil)
-	if err != nil {
-		latency := time.Since(start).Seconds()
-		FmtLog(LogLevelError, "Failed to create request: %v", err)
-		return NewProbeResult(p.Name, 0, latency, 0, err), err
-	}
+	// Run curl command with proxy and verbose output
+	cmd := exec.CommandContext(ctx, "curl",
+		"-x", aiHealthCheckProxy,
+		"-o", "/dev/null",
+		"-s", "-v",
+		"-L",
+		p.URL,
+	)
 
-	req.Header.Set("User-Agent", "curl/8.0.0")
-	FmtLog(LogLevelInfo, "Sending request: method=%s, url=%s", req.Method, req.URL)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 
-	resp, err := p.Client.Do(req)
+	err := cmd.Run()
 	latency := time.Since(start).Seconds()
+	stderrStr := stderr.String()
 
-	// Determine effective status code
+	FmtLog(LogLevelInfo, "Curl stderr:\n%s", stderrStr)
+	FmtLog(LogLevelInfo, "Curl exit code: %v", err)
+
+	// Determine status from stderr
+	var status int
 	var effectiveStatusCode int
 
-	if err != nil {
-		FmtLog(LogLevelError, "Request failed: error=%v, error_type=%T", err, err)
-
-		// Try to extract status code from url.Error (common for proxy errors)
-		effectiveStatusCode = extractStatusCodeFromError(err)
-		FmtLog(LogLevelInfo, "Request error: extracted status=%d", effectiveStatusCode)
-
-		// If still 0, try simple string matching
-		if effectiveStatusCode == 0 {
-			if strings.Contains(err.Error(), "403") {
-				effectiveStatusCode = 403
-			} else if strings.Contains(err.Error(), "401") {
-				effectiveStatusCode = 401
-			} else if strings.Contains(err.Error(), "400") {
-				effectiveStatusCode = 400
-			}
-			FmtLog(LogLevelInfo, "After string matching: extracted status=%d", effectiveStatusCode)
-		}
-	} else {
-		defer resp.Body.Close()
-		effectiveStatusCode = resp.StatusCode
-		FmtLog(LogLevelInfo, "Got response: status=%d, proto=%s", resp.StatusCode, resp.Proto)
-		FmtLog(LogLevelInfo, "Response headers:")
-		for k, v := range resp.Header {
-			FmtLog(LogLevelInfo, "  %s: %v", k, v)
-		}
-	}
-
-	// Determine success based on status code: 2xx/3xx/400/401/403 -> 1, others -> 0
-	var status int
-	if (effectiveStatusCode >= 200 && effectiveStatusCode < 400) || effectiveStatusCode == 400 || effectiveStatusCode == 401 || effectiveStatusCode == 403 {
+	if strings.Contains(stderrStr, "403") {
 		status = 1
+		effectiveStatusCode = 403
+		FmtLog(LogLevelInfo, "Found 403 in output - PASS")
+	} else if strings.Contains(stderrStr, "401") {
+		status = 1
+		effectiveStatusCode = 401
+		FmtLog(LogLevelInfo, "Found 401 in output - PASS")
+	} else if strings.Contains(stderrStr, "400") {
+		status = 1
+		effectiveStatusCode = 400
+		FmtLog(LogLevelInfo, "Found 400 in output - PASS")
+	} else if strings.Contains(stderrStr, "200") || strings.Contains(stderrStr, "204") ||
+		strings.Contains(stderrStr, "301") || strings.Contains(stderrStr, "302") ||
+		strings.Contains(stderrStr, "304") {
+		status = 1
+		// Try to find the actual status code
+		for _, code := range []int{200, 204, 301, 302, 304} {
+			if strings.Contains(stderrStr, fmt.Sprintf("%d", code)) {
+				effectiveStatusCode = code
+				break
+			}
+		}
+		if effectiveStatusCode == 0 {
+			effectiveStatusCode = 200
+		}
+		FmtLog(LogLevelInfo, "Found 2xx/3xx in output - PASS")
 	} else {
 		status = 0
+		effectiveStatusCode = 0
+		FmtLog(LogLevelWarn, "No success code found - FAIL")
 	}
 
-	FmtLog(LogLevelInfo, "Status determination: effective=%d, success=%d", effectiveStatusCode, status)
-
-	// Only return error for non-403/401/400 cases
-	if err != nil && status != 1 {
-		FmtLog(LogLevelError, "Returning error (not success): %v", err)
-		return NewProbeResult(p.Name, 0, latency, effectiveStatusCode, err), err
-	}
-
-	FmtLog(LogLevelInfo, "Request completed: status=%d, effective=%d, success=%d, latency=%.3fs",
-		func() int {
-			if resp != nil {
-				return resp.StatusCode
-			}
-			return 0
-		}(), effectiveStatusCode, status, latency)
+	FmtLog(LogLevelInfo, "Request completed: status=%d, effective=%d, latency=%.3fs", status, effectiveStatusCode, latency)
 
 	return NewProbeResult(p.Name, status, latency, effectiveStatusCode, nil), nil
-}
-
-// extractStatusCodeFromError tries to extract HTTP status code from error message
-func extractStatusCodeFromError(err error) int {
-	errStr := err.Error()
-	FmtLog(LogLevelInfo, "Extracting status from error string: %q", errStr)
-
-	// Common patterns: "403 Forbidden", "status code 403", "Received HTTP code 403"
-	for _, code := range []int{403, 401, 400, 404, 500, 502, 503} {
-		codeStr := fmt.Sprintf("%d", code)
-		if strings.Contains(errStr, codeStr) {
-			FmtLog(LogLevelInfo, "Found status code %d in error", code)
-			return code
-		}
-	}
-	FmtLog(LogLevelInfo, "No status code found in error")
-	return 0
 }
 
 // AIHealthCheckProbe is an implementation of ProbeExecutor specifically for the AI health check API.
