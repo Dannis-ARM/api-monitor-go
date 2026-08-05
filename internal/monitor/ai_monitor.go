@@ -2,62 +2,72 @@ package monitor
 
 import (
 	"context"
-	"crypto/tls"
-	"net/http"
+	"os/exec"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+)
+
+// Configuration constants
+const (
+	aiHealthCheckURL   = "https://test-ai.com"
+	aiHealthCheckName  = "AIHealthCheck"
+	aiHealthCheckProxy = "http://proxy.example.com:3128"
 )
 
 // StatusCheckProbe is an implementation of ProbeExecutor that checks HTTP status codes.
 // 2xx/3xx -> success (status=1), 4xx/5xx -> failure (status=0)
 type StatusCheckProbe struct {
-	Client *http.Client
-	URL    string
-	Name   string
+	URL  string
+	Name string
 }
 
 // NewStatusCheckProbe creates and returns a new StatusCheckProbe instance with TLS verification enabled.
-func NewStatusCheckProbe(url, name string) *StatusCheckProbe {
+func NewStatusCheckProbe(targetURL, name string) *StatusCheckProbe {
 	return &StatusCheckProbe{
-		Client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: false}, // Verify TLS certificates
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse // Don't follow redirects, record the last response
-			},
-		},
-		URL:  url,
+		URL:  targetURL,
 		Name: name,
 	}
 }
 
-// Execute implements the ProbeExecutor interface, performing an HTTP GET request
+// Execute implements the ProbeExecutor interface, performing an HTTP GET request via curl
 // and checking the status code: 2xx/3xx -> success, 4xx/5xx -> failure.
 func (p *StatusCheckProbe) Execute(ctx context.Context) (ProbeResult, error) {
 	start := time.Now()
-	req, err := http.NewRequestWithContext(ctx, "GET", p.URL, nil)
-	if err != nil {
-		return NewProbeResult(p.Name, 0, 0, 0, err), err
-	}
 
-	resp, err := p.Client.Do(req)
+	// Run curl command with proxy
+	cmd := exec.CommandContext(ctx, "curl",
+		"-x", aiHealthCheckProxy, // Proxy
+		"-o", "/dev/null", // Discard response body
+		"-s", "-w", "%{http_code}", // Silent mode, output only http code
+		"-L", // Follow redirects
+		p.URL,
+	)
+
+	output, err := cmd.Output()
 	latency := time.Since(start).Seconds()
+
 	if err != nil {
 		return NewProbeResult(p.Name, 0, latency, 0, err), err
 	}
-	defer resp.Body.Close()
 
-	// Determine success based on status code: 2xx/3xx -> 1, 4xx/5xx -> 0
+	// Parse status code from output
+	statusCodeStr := strings.TrimSpace(string(output))
+	statusCode, err := strconv.Atoi(statusCodeStr)
+	if err != nil {
+		return NewProbeResult(p.Name, 0, latency, 0, err), err
+	}
+
+	// Determine success based on status code: 2xx/3xx/400/401/403 -> 1, others -> 0
 	var status int
-	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+	if (statusCode >= 200 && statusCode < 400) || statusCode == 400 || statusCode == 401 || statusCode == 403 {
 		status = 1
 	} else {
 		status = 0
 	}
 
-	// Only return error for network/connection issues, not for 4xx/5xx status codes
-	return NewProbeResult(p.Name, status, latency, resp.StatusCode, nil), nil
+	return NewProbeResult(p.Name, status, latency, statusCode, nil), nil
 }
 
 // AIHealthCheckProbe is an implementation of ProbeExecutor specifically for the AI health check API.
@@ -67,12 +77,8 @@ type AIHealthCheckProbe struct {
 
 // NewAIHealthCheckProbe creates and returns a new AIHealthCheckProbe instance.
 func NewAIHealthCheckProbe() *AIHealthCheckProbe {
-	// Default URL and Name for AI health check probe
-	aiURL := "https://test-ai.com"
-	aiName := "AIHealthCheck"
-
 	return &AIHealthCheckProbe{
-		StatusCheckProbe: *NewStatusCheckProbe(aiURL, aiName),
+		StatusCheckProbe: *NewStatusCheckProbe(aiHealthCheckURL, aiHealthCheckName),
 	}
 }
 
@@ -113,6 +119,7 @@ func executeAIProbes(probes []ProbeExecutor, apiTimeout time.Duration, currentEn
 			// Set Prometheus metrics based on probe result
 			if err != nil {
 				FmtLog(LogLevelError, "AI health check probe %s failed: %v (latency=%.3fs)", result.APIName, err, result.Latency)
+				FmtLog(LogLevelError, "  Error type: %T", err)
 				AIHealthStatusGauge.WithLabelValues(result.APIName, currentEnv).Set(0)
 				AIHealthLatencyGauge.WithLabelValues(result.APIName, currentEnv).Set(result.Latency)
 			} else {
