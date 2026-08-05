@@ -71,18 +71,22 @@ func (p *StatusCheckProbe) Execute(ctx context.Context) (ProbeResult, error) {
 
 	if err != nil {
 		FmtLog(LogLevelError, "Request failed: error=%v, error_type=%T", err, err)
-		// Check if error is from proxy (401/403 etc.)
-		if strings.Contains(err.Error(), "403") {
-			effectiveStatusCode = 403
-		} else if strings.Contains(err.Error(), "401") {
-			effectiveStatusCode = 401
-		} else if strings.Contains(err.Error(), "400") {
-			effectiveStatusCode = 400
-		} else {
-			// Try to extract status code from error message more carefully
-			effectiveStatusCode = extractStatusCodeFromError(err)
-		}
+
+		// Try to extract status code from url.Error (common for proxy errors)
+		effectiveStatusCode = extractStatusCodeFromError(err)
 		FmtLog(LogLevelInfo, "Request error: extracted status=%d", effectiveStatusCode)
+
+		// If still 0, try simple string matching
+		if effectiveStatusCode == 0 {
+			if strings.Contains(err.Error(), "403") {
+				effectiveStatusCode = 403
+			} else if strings.Contains(err.Error(), "401") {
+				effectiveStatusCode = 401
+			} else if strings.Contains(err.Error(), "400") {
+				effectiveStatusCode = 400
+			}
+			FmtLog(LogLevelInfo, "After string matching: extracted status=%d", effectiveStatusCode)
+		}
 	} else {
 		defer resp.Body.Close()
 		effectiveStatusCode = resp.StatusCode
@@ -123,12 +127,17 @@ func (p *StatusCheckProbe) Execute(ctx context.Context) (ProbeResult, error) {
 // extractStatusCodeFromError tries to extract HTTP status code from error message
 func extractStatusCodeFromError(err error) int {
 	errStr := err.Error()
+	FmtLog(LogLevelInfo, "Extracting status from error string: %q", errStr)
+
 	// Common patterns: "403 Forbidden", "status code 403", "Received HTTP code 403"
 	for _, code := range []int{403, 401, 400, 404, 500, 502, 503} {
-		if strings.Contains(errStr, fmt.Sprintf("%d", code)) {
+		codeStr := fmt.Sprintf("%d", code)
+		if strings.Contains(errStr, codeStr) {
+			FmtLog(LogLevelInfo, "Found status code %d in error", code)
 			return code
 		}
 	}
+	FmtLog(LogLevelInfo, "No status code found in error")
 	return 0
 }
 
